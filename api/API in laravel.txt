@@ -1,0 +1,93 @@
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Cookie;
+use Illuminate\Support\Facades\Validator;
+
+// Register endpoint
+Route::post('/register', function (Request $request) {
+    $validator = Validator::make($request->all(), [
+        'username' => 'required|unique:users,username',
+        'password' => 'required|min:6',
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json($validator->errors(), 400);
+    }
+
+    $userDoc = User::create([
+        'username' => $request->input('username'),
+        'password' => Hash::make($request->input('password')),
+    ]);
+
+    $token = JWTAuth::fromUser($userDoc);
+
+    return response()
+        ->cookie('token', $token)
+        ->json([
+            'username' => $userDoc->username,
+            'id' => $userDoc->id,
+        ]);
+});
+
+// Login endpoint
+Route::post('/login', function (Request $request) {
+    $validator = Validator::make($request->all(), [
+        'username' => 'required',
+        'password' => 'required',
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json($validator->errors(), 400);
+    }
+
+    $userDoc = User::where('username', $request->input('username'))->first();
+    if (!$userDoc) {
+        return response()->json(['message' => 'User not found'], 404);
+    }
+
+    $passOk = Hash::check($request->input('password'), $userDoc->password);
+    if (!$passOk) {
+        return response()->json(['message' => 'Invalid password'], 401);
+    }
+
+    $token = JWTAuth::fromUser($userDoc);
+
+    return response()
+        ->cookie('token', $token)
+        ->json([
+            'username' => $userDoc->username,
+            'id' => $userDoc->id,
+        ]);
+});
+
+// Check token endpoint
+Route::get('/checkToken', function (Request $request) {
+    try {
+        $token = $request->cookie('token');
+        if (!$token) {
+            return response()->json(null);
+        }
+        $user = JWTAuth::parseToken()->authenticate();
+        return response()->json([
+            'username' => $user->username,
+            'id' => $user->id,
+        ]);
+    } catch (Exception $e) {
+        return response()
+            ->cookie('token', '')
+            ->json(null);
+    }
+});
+
+// Logout endpoint
+Route::post('/logout', function (Request $request) {
+    return response()
+        ->cookie('token', '')
+        ->json(['message' => 'Logged out successfully']);
+});
+
+Note that you'll need to have the User model imported in your PHP code to use the create() method,
+ and you'll need to have the JWTAuth facade imported to generate and verify JWT tokens. Also,
+ the Laravel Hash facade is used to hash and check passwords,
+ and the Validator facade is used to validate request inputs.
